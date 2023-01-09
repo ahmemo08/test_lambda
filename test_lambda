@@ -1,0 +1,125 @@
+import boto3
+def lambda_handler(event, context):
+    asg_name = event['detail']['AutoScalingGroupName']
+    SCC = 'SCC'
+    BAT = 'BAT'
+    # Reporting = 'Reporting'
+    if asg_name == "staging-xg5-searchcore2":
+        Alarm_asg = SCC
+    if asg_name == "staging-xg5-batch2":
+        Alarm_asg = BAT
+    # if asg_name == Reporting:
+    #     Alarm_asg = Reporting
+    cloudwatch = boto3.client('cloudwatch')
+    if event['detail-type'] == 'EC2 Instance Launch Successful':
+        ec2 = boto3.client('ec2')
+        instance_id = event['detail']['EC2InstanceId']
+        response = ec2.describe_instances(InstanceIds=[instance_id])
+        ami_id = response['Reservations'][0]['Instances'][0]['ImageId']
+        instance_type = response['Reservations'][0]['Instances'][0]['InstanceType']
+        autoscaling = boto3.client('autoscaling')
+        response = autoscaling.describe_auto_scaling_groups(AutoScalingGroupNames=[asg_name])
+        instances = response['AutoScalingGroups'][0]['Instances']
+        counter = 0
+        for instance in instances:
+            instance_id = instance['InstanceId']
+            counter += 1
+            if asg_name != "staging-xg5-searchcore2":
+                cloudwatch.put_metric_alarm(
+                    AlarmName=f'XG5 STAG {Alarm_asg}0{counter} Server - CPU',
+                    ComparisonOperator='GreaterThanThreshold',
+                    EvaluationPeriods=1,
+                    MetricName='CPUUtilization',
+                    Namespace='AWS/EC2',
+                    Period=300,
+                    Statistic='Average',
+                    Threshold=95.0,
+                    ActionsEnabled=True,
+                    OKActions= ["arn:aws:sns:eu-west-1:485575125510:TASUK"],
+                    AlarmActions= ["arn:aws:sns:eu-west-1:485575125510:TASUK"],
+                    Dimensions=[
+                        {
+                            'Name': 'InstanceId',
+                            'Value': instance_id
+                        }
+                    ]
+                )
+            cloudwatch.put_metric_alarm(
+                AlarmName=f'XG5 STAG {Alarm_asg}0{counter} Server - Memory',
+                ActionsEnabled= True,
+                OKActions= ["arn:aws:sns:eu-west-1:485575125510:TASUK"],
+                AlarmActions= ["arn:aws:sns:eu-west-1:485575125510:TASUK"],
+                InsufficientDataActions= [],
+                MetricName= "Memory % Committed Bytes In Use",
+                Namespace= "CWAgent",
+                Statistic= "Average",
+                Period = 300,
+                EvaluationPeriods = 3,
+                DatapointsToAlarm = 3,
+                Threshold = 80,
+                ComparisonOperator = "GreaterThanOrEqualToThreshold",
+                TreatMissingData = "missing",
+
+                Dimensions=[
+                    {
+                        'Name': 'InstanceId',
+                        'Value': instance_id
+                    },
+                    {
+                        "Name": 'AutoScalingGroupName',
+                        "Value": asg_name
+                    },
+                    {
+                        "Name": 'objectname',
+                        "Value": 'Memory'
+                    },
+                    {
+                        "Name": 'ImageId',
+                        "Value": ami_id
+                    },
+                    {
+                        "Name": 'InstanceType',
+                        "Value": instance_type
+                }
+                ],
+            )
+
+            cloudwatch.put_metric_alarm(
+                AlarmName=f'XG5 STAG {Alarm_asg}0{counter} Server - C Drive',
+                OKActions= ["arn:aws:sns:eu-west-1:485575125510:TASUK"],
+                ActionsEnabled=True,
+                AlarmActions= ["arn:aws:sns:eu-west-1:485575125510:TASUK"],
+                InsufficientDataActions= [],
+                MetricName= "LogicalDisk % Free Space",
+                Namespace= "CWAgent",
+                Statistic= "Average",
+                Period= 300,
+                EvaluationPeriods= 1,
+                DatapointsToAlarm= 1,
+                Threshold= 25,
+                ComparisonOperator= "LessThanOrEqualToThreshold",
+                TreatMissingData= "missing",
+                Dimensions=[
+                    {
+                        'Name': 'InstanceId',
+                        'Value': instance_id
+                    },
+                    {
+                        "Name": 'AutoScalingGroupName',
+                        "Value": asg_name
+                    },
+                    {
+                        "Name": 'objectname',
+                        "Value": 'C Drive'
+                    },
+                    {
+                        "Name": 'ImageId',
+                        "Value": ami_id
+                    },
+                    {
+                        "Name": 'InstanceType',
+                        "Value": instance_type
+                    }
+                ],
+            )
+
